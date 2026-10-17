@@ -1,0 +1,102 @@
+networks:
+  angemoniaque_net:
+    name: angemoniaque_net
+    driver: bridge
+
+services:
+  nginx:
+    image: nginx:alpine
+    container_name: angemoniaque_nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - angemoniaque_net
+
+  frontend:
+    build:
+      context: ../angemoniaque-front
+      dockerfile: Dockerfile
+    container_name: angemoniaque_front
+    environment:
+      - VITE_API_URL=/api/v1
+      - VITE_WS_URL=ws://localhost/ws
+    expose:
+      - "5173"
+    networks:
+      - angemoniaque_net
+
+  backend:
+    build:
+      context: ../angemoniaque-back
+      dockerfile: Dockerfile
+    container_name: angemoniaque_back
+    environment:
+      - PORT=3000
+      - DATABASE_URL=postgresql://angemoniaque:secret_password@angemoniaque_postgres:5432/angemoniaque
+      - REDIS_URL=redis://angemoniaque_redis:6379
+      - JWT_SECRET=angemoniaque_jwt_secret_2026
+    expose:
+      - "3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - angemoniaque_net
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: angemoniaque_postgres
+    env_file: .env
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./postgres/01-schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./postgres/02-seeds.sql:/docker-entrypoint-initdb.d/02-seeds.sql:ro
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U angemoniaque -d angemoniaque"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - angemoniaque_net
+
+  redis:
+    image: redis:7-alpine
+    container_name: angemoniaque_redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    networks:
+      - angemoniaque_net
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: angemoniaque_pgadmin
+    env_file: .env
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    networks:
+      - angemoniaque_net
+
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: angemoniaque_portainer
+    ports:
+      - "9000:9000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - angemoniaque_net
+
+volumes:
+  pgdata:

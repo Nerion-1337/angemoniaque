@@ -1,0 +1,11 @@
+name: CI Infra
+on: [push, pull_request]
+jobs:
+  validate-compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Copy env example
+        run: cp .env.example .env
+      - name: Validate Docker Compose syntax
+        run: docker compose config -q
